@@ -1,19 +1,34 @@
 package main
 
-// import (
-// 	"fmt"
-// )
+import (
+	"fmt"
 
-func listen(pch chan string, ui Ui) {
-	for text := range pch {
-		ui.Display(text)
+	"github.com/NicoNex/gogrep/ui"
+	"github.com/NicoNex/gogrep/backend"
+)
+
+func listen(datach chan ui.Data, ui ui.Ui) {
+	var buf string
+	var grep = backend.NewGrep()
+
+	for d := range datach {
+		buf = ""
+		ui.Display("Searching...")
+		ch, err := grep.Find(d)
+		if err != nil {
+			ui.Display(err.Error())
+			continue
+		}
+
+		for s := range ch {
+			buf = fmt.Sprintf("%s\n%s", buf, s)
+			ui.Display(buf)
+		}
 	}
 }
 
 func main() {
-	var pch = make(chan string)
-
-	ui := NewUi(pch)
-	go listen(pch, ui)
-	ui.run()
+	ui, datach := ui.NewUi()
+	go listen(datach, ui)
+	ui.Run()
 }
