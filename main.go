@@ -3,32 +3,44 @@ package main
 import (
 	"fmt"
 
-	"github.com/NicoNex/gogrep/ui"
+	"github.com/NicoNex/gogrep/frontend"
 	"github.com/NicoNex/gogrep/backend"
 )
 
-func listen(datach chan ui.Data, ui ui.Ui) {
+var grep backend.Grep
+var ui frontend.Ui
+
+func search(data frontend.Data) {
 	var buf string
-	var grep = backend.NewGrep()
 
-	for d := range datach {
-		buf = ""
-		ui.Display("Searching...")
-		ch, err := grep.Find(d)
-		if err != nil {
-			ui.Display(err.Error())
-			continue
-		}
+	ui.Display("Searching...")
+	ch, err := grep.Find(data)
+	if err != nil {
+		ui.Display(err.Error())
+		return
+	}
 
-		for s := range ch {
-			buf = fmt.Sprintf("%s\n%s", buf, s)
-			ui.Display(buf)
+	for s := range ch {
+		buf = fmt.Sprintf("%s\n%s", buf, s)
+		ui.Display(buf)
+	}
+}
+
+func listen() {
+	for {
+		select {
+		case data := <- ui.Datach:
+			go search(data)
+
+		case <- ui.Stop:
+			grep.Stop <- true
 		}
 	}
 }
 
 func main() {
-	ui, datach := ui.NewUi()
-	go listen(datach, ui)
+	ui = frontend.NewUi()
+	grep = backend.NewGrep()
+	go listen()
 	ui.Run()
 }

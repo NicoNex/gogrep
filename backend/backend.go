@@ -1,8 +1,7 @@
 package backend
 
 import (
-	// "flag"
-	"fmt"
+	// "fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -10,28 +9,30 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/NicoNex/gogrep/ui"
+	"github.com/NicoNex/gogrep/frontend"
 )
 
 type Grep struct {
-	root string
 	pattern *regexp.Regexp
 	wg sync.WaitGroup
 	glob string
 	allFiles bool
 	maxdepth int
 	outch chan string
+	sem chan bool
+	Stop chan bool
 }
 
 func NewGrep() Grep {
 	return Grep{
 		allFiles: true,
 		maxdepth: -1,
+		sem: make(chan bool, 1024),
+		Stop: make(chan bool, 1),
 	}
 }
 
-func (g *Grep) Find(data ui.Data) (chan string, error) {
-	fmt.Println(data)
+func (g *Grep) Find(data frontend.Data) (chan string, error) {
 	re, err := regexp.Compile(data.Pattern)
 	if err != nil {
 		return nil, err
@@ -40,11 +41,12 @@ func (g *Grep) Find(data ui.Data) (chan string, error) {
 	g.outch = make(chan string)
 	g.pattern = re
 	g.glob = data.Glob
-	g.root = data.Path
-	go func(g *Grep) {
-		g.walkDir(0)
+
+	go func(path string, g *Grep) {
+		g.walkDir(path, 0)
+		g.wg.Wait()
 		close(g.outch)
-	}(g)
+	}(data.Path, g)
 
 	return g.outch, nil
 }
@@ -66,7 +68,7 @@ func (g *Grep) matchGlob(fname string) bool {
 
 	ok, err := filepath.Match(g.glob, fname)
 	if err != nil {
-		fmt.Println(err)
+		g.outch <- err.Error()
 	}
 
 	return ok
@@ -77,81 +79,46 @@ func (g *Grep) checkMatch(fpath string) {
 
 	b, err := ioutil.ReadFile(fpath)
 	if err != nil {
-		fmt.Println(err)
+		g.outch <- err.Error()
 		return
 	}
 
 	if g.pattern.Match(b) {
 		g.outch <- fpath
 	}
+	<-g.sem
 }
 
 // Recursively walks in a directory tree.
-func (g *Grep) walkDir(depth int) {
-	if depth != g.maxdepth {
-		files, err := g.readDir(g.root)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+func (g *Grep) walkDir(root string, depth int) {
+	select {
+	case <-g.Stop:
+		return
 
-		for _, finfo := range files {
-			fname := finfo.Name()
-			fpath := filepath.Join(g.root, fname)
+	default:
+		if depth != g.maxdepth {
+			files, err := g.readDir(root)
+			if err != nil {
+				g.outch <- err.Error()
+				return
+			}
 
-			if fname[0] != '.' || g.allFiles {
-				if finfo.IsDir() {
-					g.walkDir(depth+1)
-				} else {
-					if g.glob == "" || g.matchGlob(fpath) {
-						g.wg.Add(1)
-						go g.checkMatch(fpath)
+			for _, finfo := range files {
+				fname := finfo.Name()
+				fpath := filepath.Join(root, fname)
+
+				if fname[0] != '.' || g.allFiles {
+					if finfo.IsDir() {
+						g.walkDir(fpath, depth+1)
+					} else {
+						if g.glob == "" || g.matchGlob(fname) {
+							g.wg.Add(1)
+							g.sem <- true
+							go g.checkMatch(fpath)
+						}
 					}
 				}
 			}
 		}
 	}
 }
-
-// func main() {
-// 	var pattern string
-// 	var files []string
-
-// 	flag.BoolVar(&prnt, "p", false, "Print to stdout.")
-// 	flag.BoolVar(&verbose, "v", false, "Verbose, explain what is being done.")
-// 	flag.StringVar(&glob, "g", "", "Add a pattern the file names must match to be edited.")
-// 	flag.BoolVar(&allFiles, "a", false, "Includes hidden files (starting with a dot).")
-// 	flag.IntVar(&maxdepth, "l", -1, "Max depth.")
-// 	flag.Usage = usage
-// 	flag.Parse()
-
-// 	if flag.NArg() >= 3 {
-// 		pattern = flag.Arg(0)
-// 		repl = flag.Arg(1)
-// 		files = flag.Args()[2:]
-// 	} else {
-// 		usage()
-// 		return
-// 	}
-
-// 	regex, err := regexp.Compile(pattern)
-// 	if err != nil {
-// 		die(err)
-// 	}
-// 	re = regex
-
-// 	for _, f := range files {
-// 		finfo, err := os.Stat(f)
-// 		if err != nil {
-// 			die(err)
-// 		}
-
-// 		if finfo.IsDir() {
-// 			walkDir(f, 0)
-// 		} else {
-// 			wg.Add(1)
-// 			go edit(f)
-// 		}
-// 		wg.Wait()
-// 	}
-// }

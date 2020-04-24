@@ -1,4 +1,4 @@
-package ui
+package frontend
 
 import (
 	"os"
@@ -10,14 +10,6 @@ import (
 	"fyne.io/fyne/theme"
 )
 
-// TODO: move all these objects in the ui package and in different files.
-// TODO: add glob and path option.
-
-// type patternEntry struct {
-// 	widget.Entry
-// 	pch chan string
-// }
-
 type Data struct {
 	Pattern string
 	Glob string
@@ -25,7 +17,8 @@ type Data struct {
 }
 
 type Ui struct {
-	dch chan Data
+	Datach chan Data
+	Stop chan bool
 	window fyne.Window
 	app fyne.App
 	output *widget.Entry
@@ -34,23 +27,15 @@ type Ui struct {
 	pentry *widget.Entry
 }
 
-// func newPatternEntry(patternCh chan string) *patternEntry {
-// 	return &patternEntry{pch: patternCh}
-// }
-
-func NewUi() (Ui, chan Data) {
-	var ui Ui
-	ui.dch = make(chan Data)
+func NewUi() Ui {
+	var ui = Ui{
+		Datach: make(chan Data, 1),
+		Stop: make(chan bool, 1),
+	}
 	ui.loadUi()
 
-	return ui, ui.dch
+	return ui
 }
-
-// func (p *patternEntry) KeyDown(ev *fyne.KeyEvent) {
-// 	if ev.Name == fyne.KeyReturn || ev.Name == fyne.KeyEnter {
-// 		p.pch <- p.Entry.Text
-// 	}
-// }
 
 func (u *Ui) Display(text string) {
 	u.output.SetText(text)
@@ -62,7 +47,7 @@ func (u *Ui) Clear() {
 
 func (u *Ui) onKeyPress(ev *fyne.KeyEvent) {
 	if ev.Name == fyne.KeyReturn || ev.Name == fyne.KeyEnter {
-		u.dch <- Data{
+		u.Datach <- Data{
 			Pattern: u.rentry.Text,
 			Glob: u.gentry.Text,
 			Path: u.pentry.Text,
@@ -93,6 +78,14 @@ func (u *Ui) loadUi() {
 		u.pentry.SetText(os.Getenv("HOME"))
 	}
 
+	// Search button.
+	searchBtn := widget.NewButton("Search", u.onSearchPressed)
+	searchBtn.Style = widget.PrimaryButton
+
+	// Stop button.
+	stopBtn := widget.NewButton("Stop", u.onStopPressed)
+	stopBtn.Style = widget.PrimaryButton
+
 	u.window = u.app.NewWindow("gogrep")
 	u.window.Resize(fyne.NewSize(960, 540))
 	u.window.SetContent(
@@ -101,12 +94,26 @@ func (u *Ui) loadUi() {
 			widget.NewHBox(
 				u.gentry,
 				u.pentry,
+				searchBtn,
+				stopBtn,
 			),
 			u.output,
 		),
 	)
 
 	u.window.Canvas().SetOnTypedKey(u.onKeyPress)
+}
+
+func (u *Ui) onSearchPressed() {
+	u.Datach <- Data{
+		Pattern: u.rentry.Text,
+		Glob: u.gentry.Text,
+		Path: u.pentry.Text,
+	}
+}
+
+func (u *Ui) onStopPressed() {
+	u.Stop <- true
 }
 
 func (u *Ui) Run() {
