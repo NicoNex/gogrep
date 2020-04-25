@@ -36,10 +36,7 @@ func listen() {
 			go search(data)
 
 		case <- ui.Stop:
-			fmt.Println("stop")
-			if _, ok := <-grep.Stop; ok {
-				grep.Stop <- 1
-			}
+			grep.Stop()
 		}
 	}
 }

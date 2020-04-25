@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"runtime"
 	"sync"
+	"context"
 
 	"github.com/NicoNex/gogrep/frontend"
 )
@@ -20,7 +21,7 @@ type Grep struct {
 	maxdepth int
 	Outch chan string
 	sem chan int
-	Stop chan int
+	cancel context.CancelFunc
 }
 
 func NewGrep() Grep {
@@ -38,18 +39,23 @@ func (g *Grep) Find(data frontend.Data) error {
 	}
 
 	g.Outch = make(chan string)
-	g.Stop = make(chan int, 1)
 	g.pattern = re
 	g.glob = data.Glob
 
 	go func(path string, g *Grep) {
-		g.walkDir(path, 0)
+		var ctx context.Context
+
+		ctx, g.cancel = context.WithCancel(context.Background())
+		g.walkDir(ctx, path, 0)
 		g.wg.Wait()
 		close(g.Outch)
-		close(g.Stop)
 	}(data.Path, g)
 
 	return nil
+}
+
+func (g *Grep) Stop() {
+	g.cancel()
 }
 
 func (g *Grep) readDir(filename string) ([]os.FileInfo, error) {
@@ -90,12 +96,11 @@ func (g *Grep) checkMatch(fpath string) {
 	<-g.sem
 }
 
-// FIXME: make the goroutine exit properly.
 // Recursively walks in a directory tree.
-func (g *Grep) walkDir(root string, depth int) {
+func (g *Grep) walkDir(ctx context.Context, root string, depth int) {
 	select {
-	case <-g.Stop:
-		runtime.Goexit()
+	case <-ctx.Done():
+		return
 
 	default:
 		if depth != g.maxdepth {
@@ -111,7 +116,7 @@ func (g *Grep) walkDir(root string, depth int) {
 
 				if fname[0] != '.' || g.allFiles {
 					if finfo.IsDir() {
-						g.walkDir(fpath, depth+1)
+						g.walkDir(ctx, fpath, depth+1)
 					} else {
 						if g.glob == "" || g.matchGlob(fname) {
 							g.wg.Add(1)
