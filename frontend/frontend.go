@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/widget"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/theme"
+	"fyne.io/fyne/layout"
 )
 
 type Data struct {
@@ -88,16 +89,23 @@ func (u *Ui) loadUi() {
 
 	u.window = u.app.NewWindow("gogrep")
 	u.window.Resize(fyne.NewSize(960, 540))
+
+	content := widget.NewVBox(
+		u.rentry,
+		widget.NewHBox(
+			u.gentry,
+			u.pentry,
+			layout.NewSpacer(),
+			searchBtn,
+			stopBtn,
+		),
+	)
+
 	u.window.SetContent(
-		widget.NewVBox(
-			u.rentry,
-			widget.NewHBox(
-				u.gentry,
-				u.pentry,
-				searchBtn,
-				stopBtn,
-			),
-			u.output,
+		fyne.NewContainerWithLayout(
+			layout.NewBorderLayout(content, nil, nil, nil),
+			content,
+			widget.NewScrollContainer(u.output),
 		),
 	)
 
