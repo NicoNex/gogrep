@@ -1,14 +1,19 @@
 package frontend
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
+	"io/ioutil"
+	"time"
 
 	"fyne.io/fyne"
 	"fyne.io/fyne/widget"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/theme"
 	"fyne.io/fyne/layout"
+	"fyne.io/fyne/dialog"
 )
 
 type Data struct {
@@ -46,14 +51,49 @@ func (u *Ui) Clear() {
 	u.Display("")
 }
 
-func (u *Ui) onKeyPress(ev *fyne.KeyEvent) {
-	if ev.Name == fyne.KeyReturn || ev.Name == fyne.KeyEnter {
-		u.Datach <- Data{
-			Pattern: u.rentry.Text,
-			Glob: u.gentry.Text,
-			Path: u.pentry.Text,
+func (u *Ui) showErr(err error) {
+	fmt.Println(err)
+	dialog.ShowError(err, u.window)
+}
+
+func (u *Ui) export() {
+	var expdir string
+
+	if runtime.GOOS == "windows" {
+		expdir = filepath.Join(os.Getenv("UserProfile"), "gogrep")
+	} else {
+		expdir = filepath.Join(os.Getenv("HOME"), "gogrep")
+	}
+
+	if _, err := os.Stat(expdir); err != nil {
+		if os.IsNotExist(err) {
+			if err := os.Mkdir(expdir, 0755); err != nil {
+				u.showErr(err)
+				return
+			}
+		} else {
+			u.showErr(err)
+			return
 		}
 	}
+
+	now := time.Now()
+	fname := fmt.Sprintf(
+		"export_%d-%02d-%02d_%02d:%02d.txt",
+		now.Year(),
+		now.Month(),
+		now.Day(),
+		now.Hour(),
+		now.Minute(),
+	)
+	fpath := filepath.Join(expdir, fname)
+	err := ioutil.WriteFile(fpath, []byte(u.output.Text), 0644)
+	if err != nil {
+		u.showErr(err)
+		return
+	}
+	msg := fmt.Sprintf("Successfully exported in %s", fpath)
+	dialog.ShowInformation("Success!", msg, u.window)
 }
 
 func (u *Ui) loadUi() {
@@ -87,6 +127,12 @@ func (u *Ui) loadUi() {
 	stopBtn := widget.NewButton("Stop", u.onStopPressed)
 	stopBtn.Style = widget.PrimaryButton
 
+	// Export button.
+	expBtn := widget.NewButton("Export", u.export)
+
+	// Clear button.
+	clrBtn := widget.NewButton("Clear", u.Clear)
+
 	u.window = u.app.NewWindow("gogrep")
 	u.window.Resize(fyne.NewSize(960, 540))
 
@@ -98,6 +144,8 @@ func (u *Ui) loadUi() {
 			layout.NewSpacer(),
 			searchBtn,
 			stopBtn,
+			expBtn,
+			clrBtn,
 		),
 	)
 
@@ -108,8 +156,6 @@ func (u *Ui) loadUi() {
 			widget.NewScrollContainer(u.output),
 		),
 	)
-
-	u.window.Canvas().SetOnTypedKey(u.onKeyPress)
 }
 
 func (u *Ui) onSearchPressed() {

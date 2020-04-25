@@ -28,7 +28,7 @@ func NewGrep() Grep {
 	return Grep{
 		allFiles: true,
 		maxdepth: -1,
-		sem: make(chan int, 1024),
+		sem: make(chan int, 512),
 	}
 }
 
