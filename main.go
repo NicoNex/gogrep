@@ -9,20 +9,23 @@ import (
 
 var grep backend.Grep
 var ui frontend.Ui
+var sem chan int
 
 func search(data frontend.Data) {
 	var buf string
 
 	ui.Display("Searching...")
-	ch, err := grep.Find(data)
+	err := grep.Find(data)
 	if err != nil {
 		ui.Display(err.Error())
 		return
 	}
 
-	for s := range ch {
+	for s := range grep.Outch {
 		buf = fmt.Sprintf("%s\n%s", buf, s)
+		sem <- 1
 		ui.Display(buf)
+		<-sem
 	}
 }
 
@@ -33,12 +36,16 @@ func listen() {
 			go search(data)
 
 		case <- ui.Stop:
-			grep.Stop <- true
+			fmt.Println("stop")
+			if _, ok := <-grep.Stop; ok {
+				grep.Stop <- 1
+			}
 		}
 	}
 }
 
 func main() {
+	sem = make(chan int, 64)
 	ui = frontend.NewUi()
 	grep = backend.NewGrep()
 	go listen()

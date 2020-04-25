@@ -1,7 +1,7 @@
 package backend
 
 import (
-	// "fmt"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -18,37 +18,38 @@ type Grep struct {
 	glob string
 	allFiles bool
 	maxdepth int
-	outch chan string
-	sem chan bool
-	Stop chan bool
+	Outch chan string
+	sem chan int
+	Stop chan int
 }
 
 func NewGrep() Grep {
 	return Grep{
 		allFiles: true,
 		maxdepth: -1,
-		sem: make(chan bool, 1024),
-		Stop: make(chan bool, 1),
+		sem: make(chan int, 1024),
 	}
 }
 
-func (g *Grep) Find(data frontend.Data) (chan string, error) {
+func (g *Grep) Find(data frontend.Data) error {
 	re, err := regexp.Compile(data.Pattern)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	g.outch = make(chan string)
+	g.Outch = make(chan string)
+	g.Stop = make(chan int, 1)
 	g.pattern = re
 	g.glob = data.Glob
 
 	go func(path string, g *Grep) {
 		g.walkDir(path, 0)
 		g.wg.Wait()
-		close(g.outch)
+		close(g.Outch)
+		close(g.Stop)
 	}(data.Path, g)
 
-	return g.outch, nil
+	return nil
 }
 
 func (g *Grep) readDir(filename string) ([]os.FileInfo, error) {
@@ -68,7 +69,7 @@ func (g *Grep) matchGlob(fname string) bool {
 
 	ok, err := filepath.Match(g.glob, fname)
 	if err != nil {
-		g.outch <- err.Error()
+		fmt.Println(err)
 	}
 
 	return ok
@@ -79,27 +80,28 @@ func (g *Grep) checkMatch(fpath string) {
 
 	b, err := ioutil.ReadFile(fpath)
 	if err != nil {
-		g.outch <- err.Error()
+		fmt.Println(err)
 		return
 	}
 
 	if g.pattern.Match(b) {
-		g.outch <- fpath
+		g.Outch <- fpath
 	}
 	<-g.sem
 }
 
+// FIXME: make the goroutine exit properly.
 // Recursively walks in a directory tree.
 func (g *Grep) walkDir(root string, depth int) {
 	select {
 	case <-g.Stop:
-		return
+		runtime.Goexit()
 
 	default:
 		if depth != g.maxdepth {
 			files, err := g.readDir(root)
 			if err != nil {
-				g.outch <- err.Error()
+				g.Outch <- err.Error()
 				return
 			}
 
@@ -113,7 +115,7 @@ func (g *Grep) walkDir(root string, depth int) {
 					} else {
 						if g.glob == "" || g.matchGlob(fname) {
 							g.wg.Add(1)
-							g.sem <- true
+							g.sem <- 1
 							go g.checkMatch(fpath)
 						}
 					}
