@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/NicoNex/gogrep/frontend"
 	"github.com/NicoNex/gogrep/backend"
+	"github.com/NicoNex/gogrep/frontend"
 )
 
 var grep backend.Grep
@@ -32,10 +32,10 @@ func search(data frontend.Data) {
 func listen() {
 	for {
 		select {
-		case data := <- ui.Datach:
+		case data := <-ui.Datach:
 			go search(data)
 
-		case <- ui.Stop:
+		case <-ui.Stop:
 			grep.Stop()
 		}
 	}

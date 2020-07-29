@@ -2,31 +2,31 @@ package frontend
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
-	"io/ioutil"
 	"time"
 
 	"fyne.io/fyne"
-	"fyne.io/fyne/widget"
 	"fyne.io/fyne/app"
-	"fyne.io/fyne/theme"
-	"fyne.io/fyne/layout"
 	"fyne.io/fyne/dialog"
+	"fyne.io/fyne/layout"
+	"fyne.io/fyne/theme"
+	"fyne.io/fyne/widget"
 )
 
 type Data struct {
 	Pattern string
-	Glob string
-	Path string
+	Glob    string
+	Path    string
 }
 
 type Ui struct {
 	Datach chan Data
-	Stop chan bool
+	Stop   chan bool
 	window fyne.Window
-	app fyne.App
+	app    fyne.App
 	output *widget.Entry
 	rentry *widget.Entry
 	gentry *widget.Entry
@@ -36,7 +36,7 @@ type Ui struct {
 func NewUi() Ui {
 	var ui = Ui{
 		Datach: make(chan Data, 1),
-		Stop: make(chan bool, 1),
+		Stop:   make(chan bool, 1),
 	}
 	ui.loadUi()
 
@@ -161,8 +161,8 @@ func (u *Ui) loadUi() {
 func (u *Ui) onSearchPressed() {
 	u.Datach <- Data{
 		Pattern: u.rentry.Text,
-		Glob: u.gentry.Text,
-		Path: u.pentry.Text,
+		Glob:    u.gentry.Text,
+		Path:    u.pentry.Text,
 	}
 }
 

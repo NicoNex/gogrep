@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -8,27 +9,26 @@ import (
 	"regexp"
 	"runtime"
 	"sync"
-	"context"
 
 	"github.com/NicoNex/gogrep/frontend"
 )
 
 type Grep struct {
-	pattern *regexp.Regexp
-	wg sync.WaitGroup
-	glob string
+	pattern  *regexp.Regexp
+	wg       sync.WaitGroup
+	glob     string
 	allFiles bool
 	maxdepth int
-	Outch chan string
-	sem chan int
-	cancel context.CancelFunc
+	Outch    chan string
+	sem      chan int
+	cancel   context.CancelFunc
 }
 
 func NewGrep() Grep {
 	return Grep{
 		allFiles: true,
 		maxdepth: -1,
-		sem: make(chan int, 512),
+		sem:      make(chan int, 1024),
 	}
 }
 
@@ -117,12 +117,12 @@ func (g *Grep) walkDir(ctx context.Context, root string, depth int) {
 				if fname[0] != '.' || g.allFiles {
 					if finfo.IsDir() {
 						g.walkDir(ctx, fpath, depth+1)
-					} else {
-						if g.glob == "" || g.matchGlob(fname) {
-							g.wg.Add(1)
+					} else if g.glob == "" || g.matchGlob(fname) {
+						go func(g *Grep) {
 							g.sem <- 1
-							go g.checkMatch(fpath)
-						}
+							g.wg.Add(1)
+							g.checkMatch(fpath)
+						}(g)
 					}
 				}
 			}
